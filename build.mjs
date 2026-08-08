@@ -125,22 +125,51 @@ function pushToken(arr, text) {
 
 
 /** 解析に失敗したとき、実際のHTMLの手がかりをログに出す */
+let diagnosedOnce = false;
 function diagnose(html, label) {
+  if (diagnosedOnce) return;          // 1館ぶんで十分。全館出すとログが読めない
+  diagnosedOnce = true;
   const $ = cheerio.load(html);
-  const dayHits = html.match(/\d{1,2}\/\d{1,2}[（(][日月火水木金土][）)]/g) || [];
-  const headingLinks = $('h1 a,h2 a,h3 a,h4 a').filter((_, e) => /\/movie\/\d+\/?$/.test($(e).attr('href') || ''));
-  const headings = $('h1,h2,h3').slice(0, 5).map((_, e) => $(e).text().replace(/\s+/g, ' ').trim().slice(0, 40)).get();
 
   console.error(`  ── 診断 (${label}) ──`);
   console.error(`     HTML長: ${html.length}`);
-  console.error(`     日付らしき文字列: ${dayHits.length}件 ${JSON.stringify(dayHits.slice(0, 6))}`);
-  console.error(`     見出し内の作品リンク: ${headingLinks.length}件`);
-  console.error(`     見出し例: ${JSON.stringify(headings)}`);
 
-  const i = html.search(/\d{1,2}\/\d{1,2}[（(][日月火水木金土][）)]/);
-  if (i >= 0) {
-    const excerpt = html.slice(Math.max(0, i - 400), i + 700).replace(/\s+/g, ' ');
-    console.error(`     日付周辺の生HTML:\n${excerpt}`);
+  // 日付は <select name="date"> の option から取れるはず
+  const opts = $('select[name="date"] option').map((_, e) =>
+    `${$(e).attr('value')}=${$(e).text().trim()}`).get();
+  console.error(`     日付option: ${opts.length}件 ${JSON.stringify(opts.slice(0, 8))}`);
+
+  // 時刻を持つ要素を起点に、上位の構造を見る
+  const timeEls = $('*').filter((_, e) => {
+    const own = $(e).clone().children().remove().end().text().trim();
+    return /^\d{1,2}:\d{2}(\s*[～~-]\s*\d{1,2}:\d{2})?$/.test(own);
+  });
+  console.error(`     時刻を含む要素: ${timeEls.length}件`);
+
+  if (timeEls.length) {
+    const first = timeEls[0];
+    const chain = [];
+    let n = first;
+    for (let i = 0; i < 6 && n; i++) {
+      const cls = (n.attribs?.class || '').slice(0, 60);
+      chain.push(`${n.name}${cls ? '.' + cls.replace(/\s+/g, '.') : ''}`);
+      n = n.parent;
+    }
+    console.error(`     時刻要素の祖先: ${chain.join('  <  ')}`);
+
+    // 時刻をまとめている一番近い「箱」の生HTML
+    let box = first;
+    for (let i = 0; i < 4 && box.parent; i++) box = box.parent;
+    console.error(`     時刻まわりの生HTML:\n${$.html(box).replace(/\s+/g, ' ').slice(0, 1800)}`);
+  }
+
+  // 作品ブロックの外枠も見たい
+  const h = $('h1 a,h2 a,h3 a,h4 a').filter((_, e) => /\/movie\/\d+\/?$/.test($(e).attr('href') || '')).first();
+  if (h.length) {
+    let sec = h[0];
+    for (let i = 0; i < 5 && sec.parent; i++) sec = sec.parent;
+    console.error(`     作品ブロック外枠: <${sec.name} class="${sec.attribs?.class || ''}">`);
+    console.error(`     作品ブロック冒頭:\n${$.html(sec).replace(/\s+/g, ' ').slice(0, 2200)}`);
   }
   console.error(`  ── 診断ここまで ──`);
 }
