@@ -49,47 +49,62 @@ async function fetchPage(url) {
  */
 function parse(html) {
   const $ = cheerio.load(html);
-  const root = $('body');
-
-  // 文書順にトークンを拾う
   const tokens = [];
-  root.find('h1,h2,h3,h4,a,span,div,p,td,th,li').each((_, el) => {
-    const $el = $(el);
-    if ($el.children().length) {                 // 子要素を持つノードは自身のテキストのみ見る
-      const own = $el.clone().children().remove().end().text().trim();
-      if (!own) return;
-      pushToken(tokens, el.tagName, own);
-    } else {
-      const t = $el.text().trim();
-      if (t) pushToken(tokens, el.tagName, t);
-    }
-  });
+  let stopped = false;
 
-  // 日付ラベルの並びから「この劇場が公開している日数」を決める
+  // DOM を再帰的に歩き、テキストノードを1つずつトークン化する。
+  // 要素のテキストをまとめて取ると「8/9（日）8/10（月）…」と連結され、
+  // セル内に素のテキストとして置かれた日付ラベルを取りこぼす。
+  function walk(node) {
+    if (stopped) return;
+    for (const child of node.children || []) {
+      if (stopped) return;
+
+      if (child.type === 'text') {
+        const t = child.data.replace(/\s+/g, ' ').trim();
+        if (!t) continue;
+        if (t.startsWith('※上映時間')) { stopped = true; return; }   // 以降はランキング等
+        pushToken(tokens, t);
+        continue;
+      }
+      if (child.type !== 'tag') continue;
+      if (child.name === 'script' || child.name === 'style') continue;
+
+      // 作品見出し: 見出し要素の中にある /movie/数字/ へのリンク。
+      // 「作品情報を見る」も同じURLを指すが見出しの外なので拾わない。
+      if (child.name === 'a') {
+        const href = child.attribs?.href || '';
+        if (/\/movie\/\d+\/?$/.test(href) && $(child).closest('h1,h2,h3,h4').length) {
+          const title = $(child).text().replace(/\s+/g, ' ').trim();
+          if (title) { tokens.push({ type: 'title', text: title }); continue; }
+        }
+      }
+      walk(child);
+    }
+  }
+  walk($('body')[0] || $.root()[0]);
+
   const dayLabels = [];
   for (const tk of tokens) {
     if (tk.type !== 'day') continue;
-    const key = tk.label;
-    if (dayLabels.includes(key)) break;          // 2周目に入ったら1作品ぶんの並びが確定
-    dayLabels.push(key);
+    if (dayLabels.includes(tk.label)) break;
+    dayLabels.push(tk.label);
   }
-  if (!dayLabels.length) throw new Error('日付ラベルが1つも見つからない（ページ構造が変わった可能性）');
+  if (!dayLabels.length) throw new Error('日付ラベルが見つからない（ページ構造が変わった可能性）');
 
-  // 見出し＝作品。直前の見出しと直前の日付に時刻を割り当てる
   const films = [];
   let cur = null, dayIdx = -1;
   for (const tk of tokens) {
     if (tk.type === 'title') {
-      cur = { title: tk.text, minutes: null, rating: null, sub: false,
-              times: dayLabels.map(() => []) };
+      cur = { title: tk.text, minutes: null, rating: null, sub: false, times: dayLabels.map(() => []) };
       films.push(cur); dayIdx = -1;
     } else if (tk.type === 'day' && cur) {
       dayIdx = dayLabels.indexOf(tk.label);
     } else if (tk.type === 'time' && cur && dayIdx >= 0) {
       cur.times[dayIdx].push({ s: tk.start, e: tk.end });
     } else if (tk.type === 'meta' && cur) {
-      const mm = tk.text.match(RE_MIN);       if (mm && !cur.minutes) cur.minutes = +mm[1];
-      const rr = tk.text.match(RE_RATING);    if (rr && !cur.rating)  cur.rating = rr[1];
+      const mm = tk.text.match(RE_MIN);    if (mm && !cur.minutes) cur.minutes = +mm[1];
+      const rr = tk.text.match(RE_RATING); if (rr && !cur.rating)  cur.rating = rr[1];
       if (tk.text.includes('字幕')) cur.sub = true;
     }
   }
@@ -98,14 +113,11 @@ function parse(html) {
   return { days, films: films.filter(f => f.times.some(a => a.length)) };
 }
 
-function pushToken(arr, tag, text) {
+function pushToken(arr, text) {
   const dm = text.match(RE_DAY);
   if (dm) { arr.push({ type:'day', label:text }); return; }
   const tm = text.match(RE_TIME);
   if (tm) { arr.push({ type:'time', start:tm[1], end:tm[2] || null }); return; }
-  if (/^h[1-4]$/i.test(tag) || (tag === 'a' && text.length > 1 && text.length < 60 && !/^\d/.test(text))) {
-    arr.push({ type:'title', text }); return;
-  }
   if (RE_MIN.test(text) || RE_RATING.test(text) || text.includes('字幕')) {
     arr.push({ type:'meta', text });
   }
@@ -120,11 +132,12 @@ async function load(theater, today) {
     catch (e) { console.error(`  ! ${theater.short} 解析失敗 (${attempt}/${RETRIES}): ${e.message}`); await sleep(RETRY_WAIT_MS); continue; }
 
     const first = parsed.days[0];
-    if (first.m === today.m && first.d === today.d) {
+    if (first.m === today.m && first.d === today.d && parsed.films.length) {
       console.log(`  ✓ ${theater.short}  ${parsed.days.length}日分 / ${parsed.films.length}作品`);
       return parsed;
     }
-    console.error(`  ! ${theater.short} キャッシュ検出: 先頭が ${first.label}（期待 ${today.m}/${today.d}）— 再取得 ${attempt}/${RETRIES}`);
+    const why = parsed.films.length ? `キャッシュ検出: 先頭が ${first.label}（期待 ${today.m}/${today.d}）` : `作品が0件（解析が噛み合っていない可能性）`;
+    console.error(`  ! ${theater.short} ${why} — 再取得 ${attempt}/${RETRIES}`);
     await sleep(RETRY_WAIT_MS);
   }
   return null;   // 諦める。データを捏造するより欠落を明示する
