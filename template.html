@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ミニシアター上映スケジュール</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@500;700&family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#14101A;--rule:#2E2637;--bone:#E9E2D6;--bright:#FBF7F0;
+    --oxblood:#9B2740;--brass:#C89B3C;--fog:#8F8599;
+    --mincho:"Zen Old Mincho",serif;--sans:"Noto Sans JP",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,monospace;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{background:var(--ink);color-scheme:dark}
+  body{background:var(--ink);color:var(--bone);font-family:var(--sans);font-size:14.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .page{background:var(--ink);color:var(--bone);min-height:100vh;min-height:100dvh;padding:0 0 44px}
+  .wrap{max-width:880px;margin:0 auto;padding:0 16px}
+  header{border-bottom:1px solid var(--rule);padding:22px 0 14px;margin-bottom:16px}
+  .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.26em;color:var(--brass);text-transform:uppercase}
+  h1{font-family:var(--mincho);font-weight:700;font-size:clamp(21px,5.4vw,31px);letter-spacing:.03em;line-height:1.2;margin:6px 0 5px;color:var(--bright)}
+  .today-stamp{display:inline-flex;align-items:baseline;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--fog)}
+  .today-stamp b{color:var(--bright);font-size:16px;font-weight:600}
+  .modes{display:flex;gap:0;margin:14px 0 0;border:1px solid var(--rule);border-radius:8px;overflow:hidden;width:fit-content}
+  .modes button{font-family:var(--sans);font-size:12.5px;font-weight:600;color:var(--fog);background:transparent;border:0;padding:7px 18px;cursor:pointer}
+  .modes button[aria-selected="true"]{color:var(--ink);background:var(--brass)}
+  .picker{display:flex;flex-wrap:wrap;gap:5px;padding:12px 0 0}
+  .picker button{font-family:var(--sans);font-size:12px;font-weight:500;line-height:1.2;color:var(--fog);background:transparent;border:1px solid var(--rule);border-radius:999px;padding:5px 11px;cursor:pointer;transition:.15s}
+  .picker button:hover{color:var(--bone);border-color:var(--fog)}
+  .picker button[aria-selected="true"]{color:var(--ink);background:var(--brass);border-color:var(--brass);font-weight:700}
+  .picker button:focus-visible,.modes button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+  .venue-note{font-family:var(--mono);font-size:10.5px;color:var(--fog);margin-top:8px}
+  .sec-head{display:flex;align-items:baseline;gap:11px;border-bottom:1px solid var(--rule);padding-bottom:6px;margin-bottom:2px}
+  .sec-head h2{font-family:var(--mincho);font-size:16.5px;font-weight:500;letter-spacing:.12em}
+  .sec-head .en{font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;color:var(--fog);text-transform:uppercase}
+  .sec-head .count{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--brass)}
+  section{margin-bottom:26px}
+
+  /* ---- overview gantt ---- */
+  .gwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--rule);border-radius:8px;margin-top:12px}
+  .grid{position:relative;min-width:1560px}
+  .grow{display:flex;align-items:stretch;border-bottom:1px solid var(--rule)}
+  .grow:last-child{border-bottom:0}
+  .glabel{position:sticky;left:0;z-index:3;flex:0 0 92px;background:#191320;border-right:1px solid var(--rule);padding:5px 7px;display:flex;flex-direction:column;justify-content:center}
+  .glabel b{font-family:var(--sans);font-size:11.5px;font-weight:700;color:var(--bright);line-height:1.25;letter-spacing:.01em}
+  .glabel span{font-family:var(--mono);font-size:9px;color:var(--fog);margin-top:1px}
+  .gtrack{position:relative;flex:1 1 auto;min-height:26px}
+  .ghead{position:sticky;top:0;z-index:4;background:#191320;border-bottom:1px solid var(--brass)}
+  .ghead .gtrack{min-height:20px}
+  .tick{position:absolute;top:0;bottom:0;border-left:1px solid rgba(46,38,55,.85)}
+  .tick.major{border-left-color:rgba(143,133,153,.4)}
+  .tlab{position:absolute;top:3px;font-family:var(--mono);font-size:9px;color:var(--fog);padding-left:3px}
+  .blk{position:absolute;height:19px;border-radius:2px;background:var(--oxblood);color:#fff;
+    font-size:9.5px;line-height:19px;padding:0 4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+    font-family:var(--sans);font-weight:500;letter-spacing:.01em}
+  .blk.est{background:#7C2036;border:1px dashed rgba(255,255,255,.35);line-height:17px}
+  .blk.pt{background:var(--brass);color:var(--ink);font-weight:700}
+  .blk:hover{outline:1px solid var(--brass);z-index:2}
+  .ghint{font-family:var(--mono);font-size:10px;color:var(--fog);margin-top:7px}
+
+  /* ---- plain list (横スクロール・館ごとの列) ---- */
+  #listbody{display:flex;gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;
+    scroll-snap-type:x proximity;padding:12px 0 8px;align-items:flex-start}
+  .lblock{flex:0 0 236px;scroll-snap-align:start;border:1px solid var(--rule);border-radius:8px;padding:9px 10px 4px;background:#191320}
+  .lhead{border-bottom:1px solid var(--brass);padding-bottom:5px;margin-bottom:3px}
+  .lhead b{display:block;font-family:var(--mincho);font-size:14.5px;font-weight:700;color:var(--bright);line-height:1.3;letter-spacing:.02em}
+  .lhead .sub{display:flex;gap:7px;margin-top:2px}
+  .lhead span{font-family:var(--mono);font-size:9.5px;color:var(--fog)}
+  .lhead em{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--brass);font-style:normal}
+  .lrow{padding:5px 0;border-bottom:1px solid var(--rule)}
+  .lrow:last-child{border-bottom:0}
+  .lrow .lt{font-family:var(--mono);font-size:11.5px;color:var(--bright);white-space:nowrap}
+  .lrow .lt i{color:var(--fog);font-style:normal}
+  .lrow .lt.est i{opacity:.6}
+  .lrow .ln{display:block;font-family:var(--sans);font-size:13px;font-weight:500;color:var(--bright);line-height:1.35;margin-top:1px}
+  .lrow .lf{display:block;font-family:var(--mono);font-size:9.5px;color:var(--fog);margin-top:1px}
+  .lnone{padding:8px 0;font-size:11.5px;color:var(--fog);line-height:1.5}
+
+  /* ---- per-cinema ---- */
+  .ruler{position:relative;height:14px;margin:10px 0 0;font-family:var(--mono);font-size:9.5px;color:var(--fog)}
+  .ruler span{position:absolute;transform:translateX(-50%)}
+  .ruler span.s{transform:none}.ruler span.e{transform:translateX(-100%)}
+  .screening{display:grid;grid-template-columns:56px 1fr;gap:0 12px;padding:9px 0 7px;border-bottom:1px solid var(--rule)}
+  .start{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--bright);padding-top:2px}
+  .title{font-family:var(--mincho);font-size:16.5px;font-weight:700;line-height:1.35;color:var(--bright)}
+  .facts{font-family:var(--mono);font-size:10.5px;color:var(--fog);margin-top:2px}
+  .facts .dot{opacity:.4;margin:0 5px}
+  .track{grid-column:1/-1;position:relative;height:4px;margin-top:7px;background:linear-gradient(to right,var(--rule),var(--rule)) center/100% 1px no-repeat}
+  .bar{position:absolute;top:0;height:4px;background:var(--oxblood);transform-origin:left center}
+  .bar.est{background:repeating-linear-gradient(90deg,var(--oxblood) 0 5px,transparent 5px 9px)}
+  .bar.point{width:4px !important;background:var(--brass);border-radius:50%}
+  @media (prefers-reduced-motion:no-preference){.bar{animation:draw .4s cubic-bezier(.2,.7,.3,1) both}@keyframes draw{from{transform:scaleX(0)}to{transform:scaleX(1)}}}
+  .empty-day{padding:16px 0;color:var(--fog);font-size:12.5px;border-bottom:1px solid var(--rule)}
+  .scroller{overflow-x:auto;margin-top:10px;-webkit-overflow-scrolling:touch}
+  table{border-collapse:collapse;width:100%;min-width:600px}
+  th,td{text-align:left;vertical-align:top;padding:6px 8px;border-bottom:1px solid var(--rule)}
+  thead th{font-family:var(--mono);font-size:10.5px;font-weight:400;color:var(--fog);border-bottom:1px solid var(--brass);white-space:nowrap}
+  thead th.now{color:var(--brass);font-weight:600}
+  td.film{font-family:var(--mincho);font-size:13.5px;font-weight:700;line-height:1.35;color:var(--bright);width:205px;min-width:170px}
+  td.film small{display:block;font-family:var(--mono);font-size:9.5px;font-weight:400;color:var(--fog);margin-top:2px}
+  td.times{font-family:var(--mono);font-size:11.5px;white-space:nowrap;color:var(--bone);line-height:1.4}
+  td.times.now{background:rgba(200,155,60,.09)}
+  td.times.empty{color:var(--rule)}
+  td.times span{display:block}
+  .notes{margin-top:24px;padding-top:12px;border-top:1px solid var(--rule);font-size:11.5px;line-height:1.65;color:var(--fog)}
+  .notes p{margin-bottom:4px}
+  .notes b{color:var(--bone);font-weight:500}
+  .legend{display:flex;flex-wrap:wrap;gap:13px;margin-bottom:8px;font-family:var(--mono);font-size:10.5px}
+  .legend i{display:inline-block;width:18px;height:9px;vertical-align:middle;margin-right:5px;border-radius:2px}
+  .legend .l1{background:var(--oxblood)}
+  .legend .l2{background:#7C2036;border:1px dashed rgba(255,255,255,.4)}
+  .legend .l3{background:var(--brass)}
+  .hide{display:none}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="wrap">
+    <header>
+      <div class="eyebrow">Tokyo Mini-Theatre Timetable</div>
+      <h1 id="ttl">上映スケジュール</h1>
+      <div class="today-stamp">本日 <b>__DATE__</b> __DOW__</div>
+      <div class="modes" role="tablist">
+        <button role="tab" data-mode="all" aria-selected="true">時間軸</button>
+        <button role="tab" data-mode="list" aria-selected="false">リスト</button>
+        <button role="tab" data-mode="one" aria-selected="false">館別</button>
+      </div>
+      <div class="picker hide" role="tablist" id="picker"></div>
+      <div class="venue-note" id="venue-note"></div>
+    </header>
+
+    <div id="view-all">
+      <section>
+        <div class="sec-head"><h2>本日の全上映</h2><span class="en">All venues today</span><span class="count" id="all-count"></span></div>
+        <div class="gwrap"><div class="grid" id="grid"></div></div>
+        <div class="ghint">横にスクロールできます。左端の館名は固定されます。</div>
+      </section>
+    </div>
+
+    <div id="view-list" class="hide">
+      <section>
+        <div class="sec-head"><h2>本日の全上映</h2><span class="en">All venues today</span><span class="count" id="list-count"></span></div>
+        <div id="listbody"></div>
+        <div class="ghint">横にスクロールすると次の映画館に移ります。</div>
+      </section>
+    </div>
+
+    <div id="view-one" class="hide">
+      <section>
+        <div class="sec-head"><h2>本日の上映</h2><span class="en">Today</span><span class="count" id="today-count"></span></div>
+        <div class="ruler" id="ruler"></div>
+        <div id="today"></div>
+      </section>
+      <section>
+        <div class="sec-head"><h2>この先の上映</h2><span class="en">Coming days</span><span class="count" id="week-range"></span></div>
+        <div class="scroller"><table><thead><tr id="week-head"></tr></thead><tbody id="week"></tbody></table></div>
+      </section>
+    </div>
+
+    <div class="notes">
+      <div class="legend">
+        <span><i class="l1"></i>終了時刻あり</span>
+        <span><i class="l2"></i>上映時間からの推定</span>
+        <span><i class="l3"></i>上映時間不明</span>
+      </div>
+      <p><b>出典</b>：映画.com の各劇場ページ。取得は __STAMP__。</p>
+      <p><b>注意</b>：上映時間・作品は変更される場合があります。予約前に各劇場の公式サイトで確認してください。取得できる日数は劇場により5日または6日と異なります。</p>
+    </div>
+  </div>
+</div>
+<script>
+/*__DATA__*/
+const toMin=t=>{const[h,m]=t.split(':').map(Number);return h*60+m};
+const fmt=m=>`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+const kindOf=s=>s.e?(s.x?'':'est'):'pt';
+
+/* ---------- 全館一覧（ガント） ---------- */
+const G_LO=8*60, G_HI=24*60, PX_PER_MIN=1560/(G_HI-G_LO);
+const gx=m=>(m-G_LO)*PX_PER_MIN;
+
+function lanes(list){ // 重なる回を段に振り分ける
+  const L=[];
+  for(const s of list){
+    const a=toMin(s.s), b=s.e?toMin(s.e):a+25;
+    let i=0; while(L[i]&&L[i].end>a+1) i++;
+    if(!L[i]) L[i]={end:0,items:[]};
+    L[i].end=b; L[i].items.push(s); s._lane=i;
+  }
+  return Math.max(L.length,1);
+}
+
+function renderAll(){
+  let total=0, html='';
+  // 時間目盛りヘッダ
+  let ticks='';
+  for(let m=G_LO;m<=G_HI;m+=30){
+    const major=m%60===0;
+    ticks+=`<div class="tick ${major?'major':''}" style="left:${gx(m)}px"></div>`;
+    if(major) ticks+=`<div class="tlab" style="left:${gx(m)}px">${Math.floor(m/60)}</div>`;
+  }
+  html+=`<div class="grow ghead"><div class="glabel"><b>時刻</b></div><div class="gtrack">${ticks}</div></div>`;
+
+  for(const k of ORDER){
+    const c=CINEMAS[k];
+    const list=c.today.slice();
+    total+=list.length;
+    const n=lanes(list);
+    let inner='';
+    for(let m=G_LO;m<=G_HI;m+=30) inner+=`<div class="tick ${m%60===0?'major':''}" style="left:${gx(m)}px"></div>`;
+    inner+=list.map(s=>{
+      const a=toMin(s.s), b=s.e?toMin(s.e):a+25;
+      const w=Math.max(gx(b)-gx(a),26);
+      return `<div class="blk ${kindOf(s)}" style="left:${gx(a).toFixed(1)}px;width:${w.toFixed(1)}px;top:${3+s._lane*21}px"
+        title="${s.s}${s.e?'–'+s.e:''} ${s.t}｜${c.name}">${s.s} ${s.t}</div>`;
+    }).join('');
+    html+=`<div class="grow"><div class="glabel"><b>${c.short}</b><span>${c.area}・${list.length}回</span></div>
+      <div class="gtrack" style="height:${6+n*21}px">${inner}</div></div>`;
+  }
+  document.getElementById('grid').innerHTML=html;
+  document.getElementById('all-count').textContent=`${ORDER.length}館 / ${total}回`;
+}
+
+/* ---------- 全館リスト（縦） ---------- */
+function renderList(){
+  let total=0;
+  const html=ORDER.map(k=>{
+    const c=CINEMAS[k];
+    total+=c.today.length;
+    const rows=c.today.length ? c.today.map(s=>{
+      const k2=kindOf(s);
+      const tail=s.e?`<i>${k2==='est'?'〜':'–'}${s.e}</i>`:'';
+      return `<div class="lrow"><div class="lt ${k2}">${s.s} ${tail}</div>
+        <span class="ln">${s.t}</span><span class="lf">${s.f.join(' / ')}</span></div>`;
+    }).join('') : '<div class="lnone">映画.comにこの日の上映が掲載されていません。</div>';
+    return `<div class="lblock"><div class="lhead"><b>${c.name}</b><div class="sub"><span>${c.area}</span><em>${c.today.length}回</em></div></div>${rows}</div>`;
+  }).join('');
+  document.getElementById('listbody').innerHTML=html;
+  document.getElementById('list-count').textContent=`${ORDER.length}館 / ${total}回`;
+}
+
+/* ---------- 館別 ---------- */
+function renderOne(key){
+  const c=CINEMAS[key];
+  document.getElementById('ttl').textContent=c.name;
+  document.getElementById('venue-note').textContent=c.note;
+  document.getElementById('today-count').textContent=`${c.today.length}回`;
+  document.getElementById('week-range').textContent=`${c.days[0].split(' ')[0]} – ${c.days[c.days.length-1].split(' ')[0]}`;
+  document.querySelectorAll('#picker button').forEach(b=>b.setAttribute('aria-selected',b.dataset.key===key));
+
+  const ruler=document.getElementById('ruler'), todayEl=document.getElementById('today');
+  if(!c.today.length){
+    ruler.innerHTML='';
+    todayEl.innerHTML='<div class="empty-day">映画.comにこの日の上映が掲載されていません。劇場公式サイトで確認してください。</div>';
+  }else{
+    const starts=c.today.map(s=>toMin(s.s));
+    const ends=c.today.map(s=>s.e?toMin(s.e):toMin(s.s));
+    const lo=Math.floor(Math.min(...starts)/60)*60;
+    const hi=Math.max(Math.ceil(Math.max(...ends)/60)*60,lo+120);
+    const span=hi-lo, pct=m=>((m-lo)/span)*100;
+    const step=span>720?180:120, ticks=[];
+    for(let m=lo;m<hi;m+=step) ticks.push(m);
+    ticks.push(hi);
+    ruler.innerHTML=ticks.map((m,i)=>{
+      const cls=i===0?'s':(i===ticks.length-1?'e':'');
+      return `<span class="${cls}" style="left:${pct(m).toFixed(2)}%">${fmt(m)}</span>`;
+    }).join('');
+    todayEl.innerHTML=c.today.map((s,i)=>{
+      const l=pct(toMin(s.s)), w=s.e?Math.max(pct(toMin(s.e))-l,0.5):0;
+      const kind=s.e?(s.x?'':'est'):'point';
+      const facts=s.f.map(f=>`<span>${f}</span>`).join('<span class="dot">/</span>');
+      return `<article class="screening"><div class="start">${s.s}</div>
+        <div><div class="title">${s.t}</div><div class="facts">${facts}</div></div>
+        <div class="track"><div class="bar ${kind}" style="left:${l.toFixed(2)}%;width:${w.toFixed(2)}%;animation-delay:${i*30}ms"></div></div></article>`;
+    }).join('');
+  }
+  document.getElementById('week-head').innerHTML='<th>作品</th>'+c.days.map((d,i)=>`<th class="${i===0?'now':''}">${d}</th>`).join('');
+  document.getElementById('week').innerHTML=c.week.map(f=>{
+    const cells=f.d.map((times,i)=>{
+      const cls='times'+(i===0?' now':'')+(times.length?'':' empty');
+      return `<td class="${cls}">${times.length?times.map(t=>`<span>${t}</span>`).join(''):'—'}</td>`;
+    }).join('');
+    return `<tr><td class="film">${f.t}<small>${f.m}</small></td>${cells}</tr>`;
+  }).join('');
+}
+
+/* ---------- モード切替 ---------- */
+document.getElementById('picker').innerHTML=ORDER.map(k=>
+  `<button role="tab" data-key="${k}" aria-selected="false">${CINEMAS[k].short}</button>`).join('');
+document.getElementById('picker').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(b) renderOne(b.dataset.key);
+});
+let current='lecinema';
+function setMode(mode){
+  document.querySelectorAll('.modes button').forEach(b=>b.setAttribute('aria-selected',b.dataset.mode===mode));
+  document.getElementById('view-all').classList.toggle('hide',mode!=='all');
+  document.getElementById('view-list').classList.toggle('hide',mode!=='list');
+  document.getElementById('view-one').classList.toggle('hide',mode!=='one');
+  document.getElementById('picker').classList.toggle('hide',mode!=='one');
+  if(mode==='one'){ renderOne(current); }
+  else {
+    document.getElementById('ttl').textContent=`${ORDER.length}館 上映スケジュール`;
+    document.getElementById('venue-note').textContent='';
+  }
+}
+document.querySelector('.modes').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(b) setMode(b.dataset.mode);
+});
+document.getElementById('picker').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(b) current=b.dataset.key;
+});
+renderAll(); renderList(); setMode('all');
+
+</script>
+</body>
+</html>

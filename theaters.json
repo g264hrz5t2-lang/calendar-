@@ -1,0 +1,15 @@
+[
+  { "key":"lecinema",      "name":"ル・シネマ 渋谷宮下",            "short":"ル・シネマ",  "area":"渋谷",     "note":"渋谷 / 渋谷東映プラザ 7F・9F",        "url":"https://eiga.com/theater/13/130301/3321/" },
+  { "key":"htc_shibuya",   "name":"ヒューマントラストシネマ渋谷",   "short":"HTC渋谷",     "area":"渋谷",     "note":"渋谷 / ココチビル 7・8F・3スクリーン", "url":"https://eiga.com/theater/13/130301/3042/" },
+  { "key":"cinemavera",    "name":"シネマヴェーラ渋谷",             "short":"ヴェーラ",    "area":"渋谷",     "note":"渋谷 / KINOHAUS 4F・142席",           "url":"https://eiga.com/theater/13/130301/3298/" },
+  { "key":"htc_yurakucho", "name":"ヒューマントラストシネマ有楽町", "short":"HTC有楽町",   "area":"有楽町",   "note":"有楽町 / イトシアプラザ 4F・2スクリーン","url":"https://eiga.com/theater/13/130102/3004/" },
+  { "key":"omori",         "name":"キネカ大森",                     "short":"キネカ大森",  "area":"大森",     "note":"大森 / 西友大森店 5F・3スクリーン",    "url":"https://eiga.com/theater/13/130713/3095/" },
+  { "key":"meguro",        "name":"目黒シネマ",                     "short":"目黒シネマ",  "area":"目黒",     "note":"目黒 / 目黒西口ビル B1・88席",        "url":"https://eiga.com/theater/13/130609/3069/" },
+  { "key":"k2",            "name":"シモキタ-エキマエ-シネマ K2",    "short":"K2 下北沢",   "area":"下北沢",   "note":"下北沢 / (tefu) lounge 2F・69席",      "url":"https://eiga.com/theater/13/130613/3317/" },
+  { "key":"shimotakaido",  "name":"下高井戸シネマ",                 "short":"下高井戸",    "area":"下高井戸", "note":"下高井戸 / 126席",                    "url":"https://eiga.com/theater/13/130606/3064/" },
+  { "key":"waseda",        "name":"早稲田松竹",                     "short":"早稲田松竹",  "area":"高田馬場", "note":"高田馬場 / 153席",                    "url":"https://eiga.com/theater/13/130611/3071/" },
+  { "key":"jimbocho",      "name":"神保町シアター",                 "short":"神保町",      "area":"神保町",   "note":"神保町 / 99席",                       "url":"https://eiga.com/theater/13/130710/3302/" },
+  { "key":"bungeiza",      "name":"新文芸坐",                       "short":"新文芸坐",    "area":"池袋",     "note":"池袋 / 264席",                        "url":"https://eiga.com/theater/13/130501/3055/" },
+  { "key":"bluestudio",    "name":"シネマ ブルースタジオ",           "short":"ブルースタジオ","area":"北千住",   "note":"北千住 / 東京芸術センター 2F・293席",  "url":"https://eiga.com/theater/13/130715/3301/" },
+  { "key":"laputa",        "name":"ラピュタ阿佐ケ谷",               "short":"ラピュタ",    "area":"阿佐ヶ谷", "note":"阿佐ヶ谷 / 48席",                     "url":"https://eiga.com/theater/13/130610/3070/" }
+]
