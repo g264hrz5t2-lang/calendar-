@@ -123,13 +123,39 @@ function pushToken(arr, text) {
   }
 }
 
+
+/** 解析に失敗したとき、実際のHTMLの手がかりをログに出す */
+function diagnose(html, label) {
+  const $ = cheerio.load(html);
+  const dayHits = html.match(/\d{1,2}\/\d{1,2}[（(][日月火水木金土][）)]/g) || [];
+  const headingLinks = $('h1 a,h2 a,h3 a,h4 a').filter((_, e) => /\/movie\/\d+\/?$/.test($(e).attr('href') || ''));
+  const headings = $('h1,h2,h3').slice(0, 5).map((_, e) => $(e).text().replace(/\s+/g, ' ').trim().slice(0, 40)).get();
+
+  console.error(`  ── 診断 (${label}) ──`);
+  console.error(`     HTML長: ${html.length}`);
+  console.error(`     日付らしき文字列: ${dayHits.length}件 ${JSON.stringify(dayHits.slice(0, 6))}`);
+  console.error(`     見出し内の作品リンク: ${headingLinks.length}件`);
+  console.error(`     見出し例: ${JSON.stringify(headings)}`);
+
+  const i = html.search(/\d{1,2}\/\d{1,2}[（(][日月火水木金土][）)]/);
+  if (i >= 0) {
+    const excerpt = html.slice(Math.max(0, i - 400), i + 700).replace(/\s+/g, ' ');
+    console.error(`     日付周辺の生HTML:\n${excerpt}`);
+  }
+  console.error(`  ── 診断ここまで ──`);
+}
+
 /** 取得＋日付検証＋リトライ */
 async function load(theater, today) {
   for (let attempt = 1; attempt <= RETRIES; attempt++) {
     const html = await fetchPage(theater.url + (attempt > 1 ? `?_=${Date.now()}` : ''));
     let parsed;
     try { parsed = parse(html); }
-    catch (e) { console.error(`  ! ${theater.short} 解析失敗 (${attempt}/${RETRIES}): ${e.message}`); await sleep(RETRY_WAIT_MS); continue; }
+    catch (e) {
+      console.error(`  ! ${theater.short} 解析失敗 (${attempt}/${RETRIES}): ${e.message}`);
+      if (attempt === RETRIES) diagnose(html, theater.short);
+      await sleep(RETRY_WAIT_MS); continue;
+    }
 
     const first = parsed.days[0];
     if (first.m === today.m && first.d === today.d && parsed.films.length) {
@@ -138,6 +164,7 @@ async function load(theater, today) {
     }
     const why = parsed.films.length ? `キャッシュ検出: 先頭が ${first.label}（期待 ${today.m}/${today.d}）` : `作品が0件（解析が噛み合っていない可能性）`;
     console.error(`  ! ${theater.short} ${why} — 再取得 ${attempt}/${RETRIES}`);
+    if (attempt === RETRIES && !parsed.films.length) diagnose(html, theater.short);
     await sleep(RETRY_WAIT_MS);
   }
   return null;   // 諦める。データを捏造するより欠落を明示する
