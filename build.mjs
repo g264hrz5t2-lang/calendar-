@@ -31,9 +31,9 @@ function todayJST() {
 }
 
 const RE_DAY   = /^(\d{1,2})\/(\d{1,2})[（(]([日月火水木金土])[）)]$/;
-const RE_TIME  = /^(\d{1,2}:\d{2})(?:\s*[～~-]\s*(\d{1,2}:\d{2}))?$/;
+const RE_TIME  = /^(\d{1,2}:\d{2})(?:[～~-](\d{1,2}:\d{2}))?$/;
 const RE_MIN   = /(\d{2,3})分/;
-const RE_RATING= /(PG12|R15\+|R18\+|G)(?![^ぁ-ん])/;
+const RE_RATING= /(?:^|[^A-Za-z])(PG12|R15\+|R18\+|G)(?![A-Za-z0-9])/;
 
 const toMin = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
 const fmt   = m => `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}`;
@@ -49,80 +49,67 @@ async function fetchPage(url) {
  */
 function parse(html) {
   const $ = cheerio.load(html);
-  const tokens = [];
-  let stopped = false;
 
-  // DOM を再帰的に歩き、テキストノードを1つずつトークン化する。
-  // 要素のテキストをまとめて取ると「8/9（日）8/10（月）…」と連結され、
-  // セル内に素のテキストとして置かれた日付ラベルを取りこぼす。
-  function walk(node) {
-    if (stopped) return;
-    for (const child of node.children || []) {
-      if (stopped) return;
+  // 日付は日付切替の <select> から。value="20260809" 形式なので確実
+  const days = $('select[name="date"] option').map((_, e) => {
+    const v = ($(e).attr('value') || '').trim();
+    const m = v.match(/^(\d{4})(\d{2})(\d{2})$/);
+    if (!m) return null;
+    const dt = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    return { key: v, m: +m[2], d: +m[3], dow: DOW[dt.getUTCDay()] };
+  }).get().filter(Boolean);
+  if (!days.length) throw new Error('日付optionが見つからない（ページ構造が変わった可能性）');
 
-      if (child.type === 'text') {
-        const t = child.data.replace(/\s+/g, ' ').trim();
-        if (!t) continue;
-        if (t.startsWith('※上映時間')) { stopped = true; return; }   // 以降はランキング等
-        pushToken(tokens, t);
-        continue;
-      }
-      if (child.type !== 'tag') continue;
-      if (child.name === 'script' || child.name === 'style') continue;
-
-      // 作品見出し: 見出し要素の中にある /movie/数字/ へのリンク。
-      // 「作品情報を見る」も同じURLを指すが見出しの外なので拾わない。
-      if (child.name === 'a') {
-        const href = child.attribs?.href || '';
-        if (/\/movie\/\d+\/?$/.test(href) && $(child).closest('h1,h2,h3,h4').length) {
-          const title = $(child).text().replace(/\s+/g, ' ').trim();
-          if (title) { tokens.push({ type: 'title', text: title }); continue; }
-        }
-      }
-      walk(child);
-    }
-  }
-  walk($('body')[0] || $.root()[0]);
-
-  const dayLabels = [];
-  for (const tk of tokens) {
-    if (tk.type !== 'day') continue;
-    if (dayLabels.includes(tk.label)) break;
-    dayLabels.push(tk.label);
-  }
-  if (!dayLabels.length) throw new Error('日付ラベルが見つからない（ページ構造が変わった可能性）');
+  const idxOf = {};
+  days.forEach((d, i) => { idxOf[d.key] = i; });
 
   const films = [];
-  let cur = null, dayIdx = -1;
-  for (const tk of tokens) {
-    if (tk.type === 'title') {
-      cur = { title: tk.text, minutes: null, rating: null, sub: false, times: dayLabels.map(() => []) };
-      films.push(cur); dayIdx = -1;
-    } else if (tk.type === 'day' && cur) {
-      dayIdx = dayLabels.indexOf(tk.label);
-    } else if (tk.type === 'time' && cur && dayIdx >= 0) {
-      cur.times[dayIdx].push({ s: tk.start, e: tk.end });
-    } else if (tk.type === 'meta' && cur) {
-      const mm = tk.text.match(RE_MIN);    if (mm && !cur.minutes) cur.minutes = +mm[1];
-      const rr = tk.text.match(RE_RATING); if (rr && !cur.rating)  cur.rating = rr[1];
-      if (tk.text.includes('字幕')) cur.sub = true;
+  $('table.weekly-schedule').each((_, tbl) => {
+    // 時刻表から親をたどり、作品見出しを含む最小のブロックを探す
+    let node = tbl, block = null, titleEl = null;
+    for (let i = 0; i < 8 && node.parent; i++) {
+      node = node.parent;
+      const $n = $(node);
+      const h = $n.find('h1 a, h2 a, h3 a, h4 a')
+        .filter((_, e) => /\/movie\/\d+\/?$/.test($(e).attr('href') || '')).first();
+      if (h.length) { block = node; titleEl = h; break; }
+      if ($n.find('table.weekly-schedule').length > 1) break;   // 別作品まで巻き込んだ
     }
-  }
+    if (!titleEl) return;
 
-  const days = dayLabels.map(l => { const m = l.match(RE_DAY); return { label: l, m: +m[1], d: +m[2], dow: m[3] }; });
-  return { days, films: films.filter(f => f.times.some(a => a.length)) };
+    const title = titleEl.text().replace(/\s+/g, ' ').trim();
+    if (!title) return;
+
+    // 上映時間・レイティング・字幕は、時刻表を除いたブロックのテキストから拾う
+    const meta = $(block).clone().find('table.weekly-schedule').remove().end()
+      .text().replace(/\s+/g, ' ');
+    const mm = meta.match(RE_MIN);
+    const rr = meta.match(RE_RATING);
+
+    const times = days.map(() => []);
+    $(tbl).find('td[data-date]').each((_, td) => {
+      const i = idxOf[($(td).attr('data-date') || '').trim()];
+      if (i === undefined) return;
+      $(td).find('a').each((_, a) => {
+        const t = $(a).text().replace(/\s+/g, '').trim();
+        const tm = t.match(RE_TIME);
+        if (tm) times[i].push({ s: tm[1], e: tm[2] || null });
+      });
+    });
+
+    if (times.some(a => a.length)) {
+      films.push({
+        title,
+        minutes: mm ? +mm[1] : null,
+        rating: rr ? rr[1] : null,
+        sub: /字幕/.test(meta),
+        times,
+      });
+    }
+  });
+
+  return { days, films };
 }
-
-function pushToken(arr, text) {
-  const dm = text.match(RE_DAY);
-  if (dm) { arr.push({ type:'day', label:text }); return; }
-  const tm = text.match(RE_TIME);
-  if (tm) { arr.push({ type:'time', start:tm[1], end:tm[2] || null }); return; }
-  if (RE_MIN.test(text) || RE_RATING.test(text) || text.includes('字幕')) {
-    arr.push({ type:'meta', text });
-  }
-}
-
 
 /** 解析に失敗したとき、実際のHTMLの手がかりをログに出す */
 let diagnosedOnce = false;
